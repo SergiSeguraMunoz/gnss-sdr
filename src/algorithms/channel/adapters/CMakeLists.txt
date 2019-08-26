@@ -16,8 +16,19 @@
 # along with GNSS-SDR. If not, see <https://www.gnu.org/licenses/>.
 #
 
-set(CHANNEL_ADAPTER_SOURCES channel.cc)
-set(CHANNEL_ADAPTER_HEADERS channel.h)
+set(CHANNEL_ADAPTER_SOURCES
+    channel.cc
+    channel_lhcp_reflectometry.cc
+    channel_lhcp_reflectometry_open_loop_processing.cc
+    channel_lhcp_rhcp_reflectometry.cc
+)
+
+set(CHANNEL_ADAPTER_HEADERS
+    channel.h
+    channel_lhcp_reflectometry.h
+    channel_lhcp_reflectometry_open_loop_processing.h
+    channel_lhcp_rhcp_reflectometry.h
+)
 
 add_library(channel_adapters
     ${CHANNEL_ADAPTER_SOURCES}

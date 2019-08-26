@@ -58,6 +58,19 @@ public:
     GNSSBlockFactory();
     virtual ~GNSSBlockFactory();
 
+    //############ Modification Algorithme de reflectometrie ############
+    bool GetReflectometry(std::shared_ptr<ConfigurationInterface> configuration);
+    int GetNumReflectedWay(std::shared_ptr<ConfigurationInterface> configuration);
+    bool GetIngespaceFormat(std::shared_ptr<ConfigurationInterface> configuration);
+    int GetIngespaceBit(std::shared_ptr<ConfigurationInterface> configuration);
+
+    std::unique_ptr<GNSSBlockInterface> GetReflectedSignalSource(std::shared_ptr<ConfigurationInterface> configuration,
+            boost::shared_ptr<gr::msg_queue> queue, int ID = -1, std::string polarization = "LHCP");
+    std::unique_ptr<std::vector<std::unique_ptr<GNSSBlockInterface>>> GetGNSSReflectometry(std::shared_ptr<ConfigurationInterface> configuration,
+            boost::shared_ptr<gr::msg_queue> queue);
+    //################# Fin de la modification #################
+
+
     std::unique_ptr<GNSSBlockInterface> GetSignalSource(const std::shared_ptr<ConfigurationInterface>& configuration,
         const gr::msg_queue::sptr queue, int ID = -1);  // NOLINT(performance-unnecessary-value-param)
 
@@ -82,6 +95,12 @@ private:
     std::unique_ptr<GNSSBlockInterface> GetChannel_1C(const std::shared_ptr<ConfigurationInterface>& configuration,
         const std::string& acq, const std::string& trk, const std::string& tlm, int channel,
         gr::msg_queue::sptr queue);
+
+    //############ Modification Algorithme de reflectometrie ############
+    std::unique_ptr<GNSSBlockInterface> GetReflectedChannel_1C(std::shared_ptr<ConfigurationInterface> configuration,
+            std::string acq, std::string trk, std::string tlm, std::string olp, int channel,
+            boost::shared_ptr<gr::msg_queue> queue, int nbTrackingInputs);
+    //################# Fin de la modification #################
 
     std::unique_ptr<GNSSBlockInterface> GetChannel_2S(const std::shared_ptr<ConfigurationInterface>& configuration,
         const std::string& acq, const std::string& trk, const std::string& tlm, int channel,

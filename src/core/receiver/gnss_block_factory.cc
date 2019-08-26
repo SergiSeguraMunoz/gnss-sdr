@@ -47,6 +47,8 @@
 #include "beidou_b3i_telemetry_decoder.h"
 #include "byte_to_short.h"
 #include "channel.h"
+#include "channel_lhcp_reflectometry.h"
+#include "channel_lhcp_rhcp_reflectometry.h"
 #include "configuration_interface.h"
 #include "direct_resampler_conditioner.h"
 #include "file_signal_source.h"
@@ -74,6 +76,7 @@
 #include "glonass_l2_ca_telemetry_decoder.h"
 #include "gnss_block_interface.h"
 #include "gps_l1_ca_dll_pll_tracking.h"
+#include "gps_l1_ca_dll_pll_tracking_reflectometry.h"
 #include "gps_l1_ca_kf_tracking.h"
 #include "gps_l1_ca_pcps_acquisition.h"
 #include "gps_l1_ca_pcps_acquisition_fine_doppler.h"
@@ -201,6 +204,60 @@ std::unique_ptr<GNSSBlockInterface> GNSSBlockFactory::GetSignalSource(
     return GetBlock(configuration, role, implementation, 0, 1, queue);
 }
 
+std::unique_ptr<GNSSBlockInterface> GNSSBlockFactory::GetReflectedSignalSource(
+        std::shared_ptr<ConfigurationInterface> configuration, boost::shared_ptr<gr::msg_queue> queue, int ID, std::string polarization)
+{
+    std::string role;
+    std::string default_implementation;
+    std::string implementation;
+    if(polarization == "LHCP")
+    {
+        default_implementation = "File_Signal_Source";
+        role = "Reflected_LHCP_SignalSource"; //backwards compatibility for old conf files
+        if (ID != -1)
+        {
+            role = "Reflected_LHCP_SignalSource" + boost::lexical_cast<std::string>(ID);
+        }
+        implementation = configuration->property(role + ".implementation", default_implementation);
+        LOG(INFO) << "Getting Reflected_LHCP_SignalSource with implementation " << implementation;
+    }
+    else if(polarization == "RHCP")
+    {
+        default_implementation = "File_Signal_Source";
+        role = "Reflected_RHCP_SignalSource"; //backwards compatibility for old conf files
+        if (ID != -1)
+        {
+            role = "Reflected_RHCP_SignalSource" + boost::lexical_cast<std::string>(ID);
+        }
+        implementation = configuration->property(role + ".implementation", default_implementation);
+        LOG(INFO) << "Getting Reflected_RHCP_SignalSource with implementation " << implementation;
+    }
+    return GetBlock(configuration, role, implementation, 0, 1, queue);
+}
+
+bool GNSSBlockFactory::GetReflectometry(std::shared_ptr<ConfigurationInterface> configuration)
+{
+    bool enable_reflecto = configuration->property("Enable Reflectometry", false);
+    return enable_reflecto;
+}
+
+int GNSSBlockFactory::GetNumReflectedWay(std::shared_ptr<ConfigurationInterface> configuration)
+{
+    int numberOfReflectedWay;
+    numberOfReflectedWay = configuration->property("Number of reflected ways", 1);
+    return numberOfReflectedWay;
+}
+
+bool GNSSBlockFactory::GetIngespaceFormat(std::shared_ptr<ConfigurationInterface> configuration){
+    bool isIngespaceFormat = configuration->property("Interleaved Direct and Reflected format", false);
+    return isIngespaceFormat;
+}
+
+int GNSSBlockFactory::GetIngespaceBit(std::shared_ptr<ConfigurationInterface> configuration){
+    int nbBit;
+    nbBit = configuration->property("Interleaved Direct and Reflected bit", 4);
+    return nbBit;
+}
 
 std::unique_ptr<GNSSBlockInterface> GNSSBlockFactory::GetSignalConditioner(
     const std::shared_ptr<ConfigurationInterface>& configuration, int ID)
@@ -383,6 +440,97 @@ std::unique_ptr<GNSSBlockInterface> GNSSBlockFactory::GetChannel_1C(
     return channel_;
 }
 
+std::unique_ptr<GNSSBlockInterface> GNSSBlockFactory::GetReflectedChannel_1C(
+        std::shared_ptr<ConfigurationInterface> configuration,
+        std::string acq, std::string trk, std::string tlm, std::string olp, int channel,
+        boost::shared_ptr<gr::msg_queue> queue, int nbTrackingInputs)
+{
+    //"appendix" is added to the "role" with the aim of Acquisition, Tracking and Telemetry Decoder adapters
+    //can find their specific configurations when they read the config
+    //TODO: REMOVE APPENDIX!! AND CHECK ALTERNATIVE MECHANISM TO GET PARTICULARIZED PARAMETERS
+    LOG(INFO) << "Instantiating Channel " << channel << " with Acquisition Implementation: "
+              << acq << ", Tracking Implementation: " << trk  << ", Telemetry Decoder implementation: " << tlm;
+
+    std::string aux = configuration->property("Acquisition_1C" + boost::lexical_cast<std::string>(channel) + ".implementation", std::string("W"));
+    std::string appendix1;
+    if(aux.compare("W") != 0)
+        {
+            appendix1 = boost::lexical_cast<std::string>(channel);
+        }
+    else
+        {
+            appendix1 = "";
+        }
+    aux = configuration->property("Tracking_1C" + boost::lexical_cast<std::string>(channel) + ".implementation", std::string("W"));
+    std::string appendix2;
+    if(aux.compare("W") != 0)
+        {
+            appendix2 = boost::lexical_cast<std::string>(channel);
+        }
+    else
+        {
+            appendix2 = "";
+        }
+    aux = configuration->property("TelemetryDecoder_1C" + boost::lexical_cast<std::string>(channel) + ".implementation", std::string("W"));
+    std::string appendix3;
+    if(aux.compare("W") != 0)
+        {
+            appendix3 = boost::lexical_cast<std::string>(channel);
+        }
+    else
+        {
+            appendix3 = "";
+        }
+//    aux = configuration->property("OpenLoopProcessing_1C" + boost::lexical_cast<std::string>(channel) + ".implementation", std::string("W"));
+    std::string appendix4;
+    if(aux.compare("W") != 0)
+        {
+            appendix4 = boost::lexical_cast<std::string>(channel);
+        }
+    else
+        {
+            appendix4 = "";
+        }
+
+
+    std::unique_ptr<GNSSBlockInterface> pass_through_ = GetBlock(configuration, "Channel", "Pass_Through", 1, 1, queue);
+    std::unique_ptr<AcquisitionInterface> acq_ = GetAcqBlock(configuration, "Acquisition_1C" + appendix1, acq, 1, 0);
+    std::unique_ptr<TrackingInterface> trk_ = GetTrkBlock(configuration, "Tracking_1C"+ appendix2, trk, nbTrackingInputs, 1);
+    std::unique_ptr<TelemetryDecoderInterface> tlm_ = GetTlmBlock(configuration, "TelemetryDecoder_1C" + appendix3, tlm, 1, 1);
+//    std::unique_ptr<OpenLoopProcessingInterface> olp_ = GetOlpBlock(configuration, "OpenLoopProcessing" + appendix4, olp, 1, 0);
+
+    if(nbTrackingInputs == 2)
+    {
+/*        bool olpEnabled = configuration->property("OUTPUT_FILTER enable", false);
+        if(olpEnabled==true){
+        std::cout << "Open Loop Processing ENABLED \n";
+            std::unique_ptr<GNSSBlockInterface> channel_(new Channel_LHCP_Reflectometry_Open_Loop_Processing(configuration.get(), channel, std::move(pass_through_),
+                            std::move(acq_),
+                            std::move(trk_),
+                            std::move(tlm_),
+                            std::move(olp_),
+                            "Channel", "1C" + appendix1, queue));
+            return channel_;
+        }
+        else{*/
+        std::unique_ptr<GNSSBlockInterface> channel_(new Channel_LHCP_Reflectometry(configuration.get(), channel,
+                            std::move(acq_),
+                            std::move(trk_),
+                            std::move(tlm_),
+                            "Channel", "1C" + appendix1, queue));
+        return channel_;
+//        }
+    }
+    else
+    {
+        std::unique_ptr<GNSSBlockInterface> channel_(new Channel_LHCP_RCHP_Reflectometry(configuration.get(), channel,
+                         std::move(acq_),
+                         std::move(trk_),
+                         std::move(tlm_),
+                         "Channel", "1C" + appendix1, queue));
+        return channel_;
+    }
+}
 
 //********* GPS L2C (M) CHANNEL *****************
 std::unique_ptr<GNSSBlockInterface> GNSSBlockFactory::GetChannel_2S(
@@ -1227,6 +1375,64 @@ std::unique_ptr<std::vector<std::unique_ptr<GNSSBlockInterface>>> GNSSBlockFacto
 }
 
 
+std::unique_ptr<std::vector<std::unique_ptr<GNSSBlockInterface>>> GNSSBlockFactory::GetGNSSReflectometry(
+        std::shared_ptr<ConfigurationInterface> configuration, boost::shared_ptr<gr::msg_queue> queue)
+{
+    std::string default_implementation = "Pass_Through";
+    std::string tracking_implementation;
+    std::string telemetry_decoder_implementation;
+    std::string acquisition_implementation;
+    std::string open_loop_processing_implementation;
+
+
+    int nbReflectedWays = GNSSBlockFactory::GetNumReflectedWay(configuration);
+
+    unsigned int channel_absolute_id = 0;
+    unsigned int Channels_1C_count = configuration->property("Channels_1C.count", 0);
+    unsigned int Channels_2S_count = configuration->property("Channels_2S.count", 0);
+    unsigned int Channels_1B_count = configuration->property("Channels_1B.count", 0);
+    unsigned int Channels_5X_count = configuration->property("Channels_5X.count", 0);
+
+    unsigned int total_channels = Channels_1C_count +
+            Channels_2S_count +
+            Channels_1B_count +
+            Channels_5X_count;
+    std::unique_ptr<std::vector<std::unique_ptr<GNSSBlockInterface>>> channels(new std::vector<std::unique_ptr<GNSSBlockInterface>>(total_channels));
+    //**************** GPS L1 C/A  CHANNELS **********************
+
+    LOG(INFO) << "Getting " << Channels_1C_count << " GPS L1 C/A channels";
+    acquisition_implementation = configuration->property("Acquisition_1C.implementation", default_implementation);
+    tracking_implementation  = configuration->property("Tracking_1C.implementation", default_implementation);
+    telemetry_decoder_implementation = configuration->property("TelemetryDecoder_1C.implementation", default_implementation);
+//    open_loop_processing_implementation = "OpenLoopProcessing";
+
+    for (unsigned int i = 0; i < Channels_1C_count; i++)
+        {
+            //(i.e. Acquisition_1C0.implementation=xxxx)
+            std::string acquisition_implementation_specific = configuration->property(
+                            "Acquisition_1C" + boost::lexical_cast<std::string>(channel_absolute_id) + ".implementation",
+                            acquisition_implementation);
+            //(i.e. Tracking_1C0.implementation=xxxx)
+            std::string tracking_implementation_specific  = configuration->property(
+                            "Tracking_1C" + boost::lexical_cast<std::string>(channel_absolute_id) + ".implementation",
+                            tracking_implementation);
+            std::string  telemetry_decoder_implementation_specific = configuration->property(
+                            "TelemetryDecoder_1C" + boost::lexical_cast<std::string>(channel_absolute_id) + ".implementation",
+                            telemetry_decoder_implementation);
+
+            // Push back the channel to the vector of channels
+             channels->at(channel_absolute_id) = std::move(GetReflectedChannel_1C(configuration,
+                     acquisition_implementation_specific,
+                     tracking_implementation_specific,
+                     telemetry_decoder_implementation_specific,
+                     open_loop_processing_implementation,
+                     channel_absolute_id,
+                     queue,
+                     nbReflectedWays+1));
+             channel_absolute_id++;
+        }
+}
+
 /*
  * Returns the block with the required configuration and implementation
  *
@@ -1713,6 +1919,13 @@ std::unique_ptr<GNSSBlockInterface> GNSSBlockFactory::GetBlock(
                 out_streams));
             block = std::move(block_);
         }
+    else if (implementation == "GPS_L1_CA_DLL_PLL_Tracking_Reflectometry")
+        {
+            std::unique_ptr<GNSSBlockInterface> block_(new GpsL1CaDllPllTrackingReflectometry(configuration.get(), role, in_streams,
+                    out_streams));
+            block = std::move(block_);
+        }
+
     else if (implementation == "GPS_L1_CA_KF_Tracking")
         {
             std::unique_ptr<GNSSBlockInterface> block_(new GpsL1CaKfTracking(configuration.get(), role, in_streams,
@@ -2125,6 +2338,13 @@ std::unique_ptr<TrackingInterface> GNSSBlockFactory::GetTrkBlock(
                 out_streams));
             block = std::move(block_);
         }
+    else if (implementation == "GPS_L1_CA_DLL_PLL_Tracking_Reflectometry")
+        {
+            std::unique_ptr<TrackingInterface> block_(new GpsL1CaDllPllTrackingReflectometry(configuration.get(), role, in_streams,
+                    out_streams));
+            block = std::move(block_);
+        }
+
     else if (implementation == "GPS_L1_CA_KF_Tracking")
         {
             std::unique_ptr<TrackingInterface> block_(new GpsL1CaKfTracking(configuration.get(), role, in_streams,

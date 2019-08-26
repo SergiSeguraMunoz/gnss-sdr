@@ -31,6 +31,7 @@ endif()
 
 set(TRACKING_LIB_SOURCES
     cpu_multicorrelator.cc
+    cpu_multicorrelator_reflectometry.cc
     cpu_multicorrelator_real_codes.cc
     cpu_multicorrelator_16sc.cc
     lock_detectors.cc
@@ -48,6 +49,7 @@ set(TRACKING_LIB_SOURCES
 
 set(TRACKING_LIB_HEADERS
     cpu_multicorrelator.h
+    cpu_multicorrelator_reflectometry.h
     cpu_multicorrelator_real_codes.h
     cpu_multicorrelator_16sc.h
     lock_detectors.h

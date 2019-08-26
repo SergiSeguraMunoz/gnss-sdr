@@ -43,7 +43,7 @@
 #include "configuration_interface.h"
 #include "gnss_sdr_flags.h"
 #include <glog/logging.h>
-
+#include <iostream>
 
 GpsL1CaKfTracking::GpsL1CaKfTracking(
     ConfigurationInterface* configuration, const std::string& role,
@@ -137,6 +137,7 @@ void GpsL1CaKfTracking::start_tracking()
  */
 void GpsL1CaKfTracking::set_channel(unsigned int channel)
 {
+    std::cout << "SSEEEET CHANNEL kf" << std::endl;
     channel_ = channel;
     tracking_->set_channel(channel);
 }
