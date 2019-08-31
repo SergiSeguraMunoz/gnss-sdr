@@ -1579,6 +1579,62 @@ void GNSSFlowgraph::set_configuration(std::shared_ptr<ConfigurationInterface> co
     configuration_ = std::move(configuration);
 }
 
+    std::cout << "Formating Interleaved input file:";
+
+    std::string default_implementation = "error_file_not_found";
+    std::string fileInPath = configuration_->property("data input filename",default_implementation);
+    int nbBitRecorded = configuration_->property("Interleaved Direct and Reflected bit",0);
+    boost::filesystem::path p(fileInPath);
+    std::cout << fileInPath+"\nNumber Of Bits:" << nbBitRecorded << "\n";
+    std::string filePathOut_R = p.parent_path().c_str()+std::string("/Reflechi_")+p.filename().c_str();
+    std::string filePathOut_D = p.parent_path().c_str()+std::string("/Direct_")+p.filename().c_str();
+    FILE *fin, *fout_R, *fout_D;
+    fin = fopen(fileInPath.c_str(), "rb");
+    fout_R = fopen(filePathOut_R.c_str(), "wb");
+    fout_D = fopen(filePathOut_D.c_str(), "wb");
+    if (fin==NULL||fout_D==NULL||fout_D==NULL){
+        std::cout << ("Opening file error\n");
+        return;
+    }
+    int8_t bits_ch0[2*NUM_SAMP];
+    int8_t bits_ch1[2*NUM_SAMP];
+
+    if (nbBitRecorded==2) {
+        char memblock[NUM_SAMP];
+        int8_t symbole[4] = {-3,-1, +1,+3};
+        while (fread(memblock, sizeof(char), NUM_SAMP, fin) == NUM_SAMP){
+            for (int k=0; k<NUM_SAMP; k++) {
+                bits_ch1[2*k+0] = symbole[(memblock[k] >> 0)&0x03]; // 1-I
+                bits_ch1[2*k+1] = symbole[(memblock[k] >> 2)&0x03]; // 1-Q
+                bits_ch0[2*k+0] = symbole[(memblock[k] >> 4)&0x03]; // 0-I
+                bits_ch0[2*k+1] = symbole[(memblock[k] >> 6)&0x03]; // 0-Q
+            }
+            fwrite(bits_ch0, sizeof(int8_t), 2*NUM_SAMP, fout_D);
+            fwrite(bits_ch1, sizeof(int8_t), 2*NUM_SAMP, fout_R);
+        }
+    }
+    if (nbBitRecorded==4) {
+        uint16_t memblock[NUM_SAMP];
+        int8_t symbole[16] = {-15,-13,-11,-9,-7,-5,-3,-1,1,3,5,7,9,11,13,15};
+        while (fread(memblock, sizeof(uint16_t), NUM_SAMP, fin) == NUM_SAMP){
+            for (int k=0; k<NUM_SAMP; k++) {
+                bits_ch0[2*k+0] = symbole[(memblock[k] >> 0)&0x000F]; // 0-I
+                bits_ch0[2*k+1] = symbole[(memblock[k] >> 4)&0x000F]; // 0-Q
+                bits_ch1[2*k+0] = symbole[(memblock[k] >> 8)&0x000F]; // 1-I
+                bits_ch1[2*k+1] = symbole[(memblock[k] >> 12)&0x000F]; // 1-Q
+            }
+            fwrite(bits_ch0, sizeof(int8_t), 2*NUM_SAMP, fout_D);
+            fwrite(bits_ch1, sizeof(int8_t), 2*NUM_SAMP, fout_R);
+        }
+    }
+    fclose(fout_D);
+    fclose(fout_R);
+    fclose(fin);
+    std::cout << "input file formated! \n";
+}
+
+
+
 
 #ifdef ENABLE_FPGA
 void GNSSFlowgraph::start_acquisition_helper()

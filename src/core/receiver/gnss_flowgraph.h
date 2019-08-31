@@ -149,6 +149,7 @@ private:
     void set_signals_list();
     void set_channels_state();  // Initializes the channels state (start acquisition or keep standby)
                                 // using the configuration parameters (number of channels and max channels in acquisition)
+    void INGESPACE_formating();
     Gnss_Signal search_next_signal(const std::string& searched_signal, bool pop, bool tracked = false);
     bool connected_;
     bool running_;
